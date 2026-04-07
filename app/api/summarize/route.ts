@@ -49,9 +49,9 @@ export async function POST(request: NextRequest) {
         if (resultado.tarefas?.length > 0) {
             const tarefas = resultado.tarefas.map((tarefa: any) => ({
                 meetingId: meetingId,
-                description: t.descricao,
-                responsible: t.responsavel,
-                due_date: t.prazo,
+                description: tarefas.descricao,
+                responsible: tarefas.responsavel,
+                due_date: tarefas.prazo,
             }))
             await supabaseAdmin.from('tasks').insert(tarefas)       
         }
