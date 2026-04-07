@@ -1,10 +1,10 @@
 'use client'
 
-import { use, useState } from 'react'
+import { useState } from 'react'
 
 export default function Home() {
   const [arquivo, setArquivo] = useState<File | null>(null)
-  const [emailDestino, setemailDestino] = useState('')
+  const [emailDestino, setEmailDestino] = useState('')
   const [transcricao, setTranscricao] = useState('')
   const [resumo, setResumo] = useState<any>(null)
   const [etapa, setEtapa] = useState<
@@ -13,16 +13,16 @@ export default function Home() {
   const [erro, setErro] = useState('')
   const processando = etapa !== 'idle' && etapa !== 'pronto'
 
-  async function processarReuniao(){
-    if (!arquivo) return setErro('Por favor, selecione um arquivo de áudio.')
-    if (!emailDestino) return setErro('Por favor, insira um email de destino.')
+  async function processarReuniao() {
+    if (!arquivo) return setErro('Selecione um arquivo de áudio')
+    if (!emailDestino) return setErro('Digite um email para receber a ata')
     setErro('')
-    
-    try{
+
+    try {
       setEtapa('transcrevendo')
       const form = new FormData()
       form.append('audio', arquivo)
-      const r1 = await fetch('/api/transcribe', {method: 'POST', body: form})
+      const r1 = await fetch('/api/transcribe', { method: 'POST', body: form })
       const d1 = await r1.json()
       if (d1.error) throw new Error(d1.error)
       setTranscricao(d1.transcript)
@@ -30,8 +30,8 @@ export default function Home() {
       setEtapa('resumindo')
       const r2 = await fetch('/api/summarize', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({transcript: d1.transcript}),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: d1.transcript }),
       })
       const d2 = await r2.json()
       if (d2.error) throw new Error(d2.error)
@@ -40,7 +40,7 @@ export default function Home() {
       setEtapa('enviando')
       const r3 = await fetch('/api/send-email', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           destinatarios: [emailDestino],
           dadosReuniao: {
@@ -52,7 +52,7 @@ export default function Home() {
       const d3 = await r3.json()
       if (d3.error) throw new Error(d3.error)
       setEtapa('pronto')
-    } catch(e: any){
+    } catch (e: any) {
       setErro(e.message)
       setEtapa('idle')
     }
@@ -68,7 +68,7 @@ export default function Home() {
             <div className="w-7 h-7 bg-black rounded-lg flex items-center justify-center">
               <span className="text-white text-xs font-bold">M</span>
             </div>
-            <span className="font-medium text-[#34A853] text-sm">MeetMind</span>
+            <span className="font-medium text-sm">MeetMind</span>
           </div>
           <span className="text-xs text-gray-400">IA para reuniões</span>
         </div>
@@ -85,7 +85,7 @@ export default function Home() {
             </div>
             <h1 className="text-4xl font-medium text-gray-900 mb-4 leading-tight">
               Sua reunião acabou.<br />
-              <span className="text-[#34A853]">A ata já está no email.</span>
+              <span className="text-gray-400">A ata já está no email.</span>
             </h1>
             <p className="text-gray-500 text-lg max-w-md mx-auto">
               Envie o áudio da reunião e receba em segundos o resumo,
@@ -106,12 +106,12 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h2 className="text-lg text-gray-700 font-medium mb-1">Ata enviada!</h2>
+                <h2 className="text-lg font-medium mb-1">Ata enviada!</h2>
                 <p className="text-sm text-gray-400 mb-6">Chegou para {emailDestino}</p>
                 <button
                   onClick={() => {
                     setArquivo(null)
-                    setemailDestino('')
+                    setEmailDestino('')
                     setTranscricao('')
                     setResumo(null)
                     setEtapa('idle')
@@ -159,9 +159,9 @@ export default function Home() {
                   <input
                     type="email"
                     value={emailDestino}
-                    onChange={(e) => setemailDestino(e.target.value)}
+                    onChange={(e) => setEmailDestino(e.target.value)}
                     placeholder="seu@email.com"
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition"
                   />
                 </div>
 
