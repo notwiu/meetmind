@@ -1,4 +1,3 @@
-// URL da sua API no Vercel (ou localhost para testes)
 const API_URL = 'https://meetmind.vercel.app' // troque pelo seu domínio
 
 let mediaRecorder = null
@@ -8,52 +7,76 @@ let emailDestino = ''
 let intervalId = null
 let gravando = false
 
-// ─── Injetar o botão na interface do Meet ───────────────────────────────────
+// ─── Criar o botão flutuante ──────────────────────────────────────────────────
+// Em vez de injetar na barra do Meet (que muda sempre),
+// criamos um botão flutuante fixo no canto da tela.
+// Funciona 100% independente da versão do Meet.
 
-function injetarBotao() {
-  // Evita injetar o botão duas vezes
-  if (document.getElementById('meetmind-btn')) return
+function criarBotaoFlutuante() {
+  if (document.getElementById('meetmind-fab')) return
 
-  // Aguarda a barra de controles do Meet carregar
-  const barra = document.querySelector('[data-call-ended]')?.parentElement
-    ?? document.querySelector('div[jsname="CmRyGd"]')
-    ?? document.querySelector('[data-panel-id="goog-ws-caf-id"]')?.parentElement
-
-  if (!barra) {
-    // Se a barra ainda não carregou, tenta de novo em 2 segundos
-    setTimeout(injetarBotao, 2000)
-    return
-  }
-
-  const btn = document.createElement('button')
-  btn.id = 'meetmind-btn'
-  btn.innerHTML = `
-    <span id="meetmind-status" style="
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: #1a1a1a;
-      color: white;
-      border: none;
-      border-radius: 20px;
-      padding: 8px 16px;
-      font-size: 13px;
+  const fab = document.createElement('div')
+  fab.id = 'meetmind-fab'
+  fab.innerHTML = `
+    <div id="meetmind-inner" style="
+      position: fixed;
+      bottom: 80px;
+      right: 20px;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
       font-family: -apple-system, sans-serif;
-      cursor: pointer;
-      font-weight: 500;
     ">
-      <span style="width:8px;height:8px;border-radius:50%;background:#666;display:inline-block"></span>
-      Iniciar ata
-    </span>
-  `
-  btn.style.cssText = 'border:none;background:none;cursor:pointer;margin: 0 8px;'
-  btn.onclick = toggleGravacao
+      <!-- Notificação de status (aparece durante gravação) -->
+      <div id="meetmind-toast" style="
+        display: none;
+        background: #1a1a1a;
+        color: white;
+        font-size: 12px;
+        padding: 6px 12px;
+        border-radius: 20px;
+        white-space: nowrap;
+      ">⏺ Gravando...</div>
 
-  barra.appendChild(btn)
-  console.log('[MeetMind] Botão injetado com sucesso')
+      <!-- Botão principal -->
+      <button id="meetmind-btn" style="
+        background: #1a1a1a;
+        color: white;
+        border: none;
+        border-radius: 24px;
+        padding: 12px 20px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        transition: background 0.2s;
+      ">
+        <span id="meetmind-dot" style="
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #666;
+          display: inline-block;
+          flex-shrink: 0;
+        "></span>
+        <span id="meetmind-label">Iniciar ata</span>
+      </button>
+    </div>
+  `
+
+  document.body.appendChild(fab)
+
+  document.getElementById('meetmind-btn').addEventListener('click', toggleGravacao)
+
+  console.log('[MeetMind] Botão flutuante criado com sucesso')
 }
 
-// ─── Ligar/desligar a gravação ───────────────────────────────────────────────
+// ─── Ligar / desligar gravação ────────────────────────────────────────────────
 
 async function toggleGravacao() {
   if (!gravando) {
@@ -64,65 +87,74 @@ async function toggleGravacao() {
 }
 
 async function iniciarGravacao() {
-  // Pede o email do destinatário
   emailDestino = prompt(
-    'Digite o email para receber a ata (pode ser o seu):\n\nSepare múltiplos emails com vírgula.',
+    'Digite o email para receber a ata:\n(separe múltiplos emails com vírgula)',
     ''
   )
-  if (!emailDestino) return
+  if (!emailDestino || !emailDestino.trim()) return
 
   try {
-    // Captura o áudio do sistema (a reunião) + microfone
+    // Captura áudio do sistema (vozes dos participantes)
     const streamTela = await navigator.mediaDevices.getDisplayMedia({
-      video: false,   // não captura vídeo, economiza memória
-      audio: true,    // captura o áudio do sistema (voz dos participantes)
+      video: false,
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        sampleRate: 44100,
+      },
     })
 
+    // Captura o microfone (sua própria voz)
     const streamMic = await navigator.mediaDevices.getUserMedia({
-      audio: true,
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
       video: false,
     })
 
-    // Mistura os dois streams (sistema + microfone)
-    const audioContext = new AudioContext()
-    const destino = audioContext.createMediaStreamDestination()
+    // Mistura os dois áudios num único stream
+    const ctx = new AudioContext()
+    const destino = ctx.createMediaStreamDestination()
+    ctx.createMediaStreamSource(streamTela).connect(destino)
+    ctx.createMediaStreamSource(streamMic).connect(destino)
 
-    audioContext.createMediaStreamSource(streamTela).connect(destino)
-    audioContext.createMediaStreamSource(streamMic).connect(destino)
-
-    const streamFinal = destino.stream
-
-    // Iniciar o gravador
-    mediaRecorder = new MediaRecorder(streamFinal, {
-      mimeType: 'audio/webm;codecs=opus'
+    mediaRecorder = new MediaRecorder(destino.stream, {
+      mimeType: 'audio/webm;codecs=opus',
     })
 
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        audioChunks.push(event.data)
-      }
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) audioChunks.push(e.data)
     }
 
-    // Coleta um chunk a cada 30 segundos e envia para transcrição
-    mediaRecorder.start(30000) // 30000ms = 30 segundos por chunk
+    // Coleta chunks a cada 30 segundos
+    mediaRecorder.start(30000)
 
-    // A cada 30 segundos, processa o chunk acumulado
     intervalId = setInterval(async () => {
       if (audioChunks.length === 0) return
-
-      const chunkParaEnviar = [...audioChunks]
-      audioChunks = [] // limpa para o próximo ciclo
-
-      await transcreverChunk(chunkParaEnviar)
+      const chunks = [...audioChunks]
+      audioChunks = []
+      await transcreverChunk(chunks)
     }, 30000)
 
     gravando = true
-    atualizarBotao(true)
+    atualizarVisual('gravando')
+
+    // Para automaticamente se o usuário fechar o compartilhamento
+    streamTela.getAudioTracks()[0].onended = () => {
+      if (gravando) encerrarGravacao()
+    }
+
     console.log('[MeetMind] Gravação iniciada')
 
   } catch (erro) {
-    console.error('[MeetMind] Erro ao iniciar gravação:', erro)
-    alert('Erro ao acessar áudio. Verifique as permissões do navegador.')
+    console.error('[MeetMind] Erro ao iniciar:', erro)
+
+    if (erro.name === 'NotAllowedError') {
+      alert('Permissão negada.\n\nVocê precisa:\n1. Clicar em "Compartilhar"\n2. Selecionar "Aba do Chrome"\n3. Marcar "Compartilhar áudio da aba"')
+    } else {
+      alert('Erro ao acessar áudio: ' + erro.message)
+    }
   }
 }
 
@@ -130,73 +162,68 @@ async function encerrarGravacao() {
   gravando = false
   clearInterval(intervalId)
 
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+  if (mediaRecorder?.state !== 'inactive') {
     mediaRecorder.stop()
   }
 
-  // Processa os chunks finais que sobraram
+  atualizarVisual('processando')
+
+  // Processa os chunks que sobraram
   if (audioChunks.length > 0) {
-    await transcreverChunk(audioChunks)
+    await transcreverChunk([...audioChunks])
     audioChunks = []
   }
 
-  atualizarBotao(false, 'Gerando ata...')
-
-  // Envia a transcrição completa para o resumo
   await gerarResumoEEnviarEmail()
 }
 
-// ─── Transcrever um chunk de áudio ──────────────────────────────────────────
+// ─── Transcrever chunk de áudio ───────────────────────────────────────────────
 
 async function transcreverChunk(chunks) {
   try {
     const blob = new Blob(chunks, { type: 'audio/webm' })
+    if (blob.size < 500) return // ignora chunks muito pequenos
 
-    // Só envia se o chunk tiver tamanho mínimo (evita chunks vazios)
-    if (blob.size < 1000) return
+    const form = new FormData()
+    form.append('audio', blob, 'chunk.webm')
 
-    const formData = new FormData()
-    formData.append('audio', blob, 'chunk.webm')
-
-    const resposta = await fetch(`${API_URL}/api/transcribe`, {
+    const res = await fetch(`${API_URL}/api/transcribe`, {
       method: 'POST',
-      body: formData,
+      body: form,
     })
+    const dados = await res.json()
 
-    const dados = await resposta.json()
-
-    if (dados.transcript) {
+    if (dados.transcript && dados.transcript.trim()) {
       transcricaoCompleta += ' ' + dados.transcript
-      console.log('[MeetMind] Chunk transcrito:', dados.transcript.slice(0, 80) + '...')
+      console.log('[MeetMind] +', dados.transcript.slice(0, 60) + '...')
     }
-  } catch (erro) {
-    console.error('[MeetMind] Erro ao transcrever chunk:', erro)
+  } catch (e) {
+    console.error('[MeetMind] Erro ao transcrever chunk:', e)
   }
 }
 
-// ─── Gerar resumo e enviar email ─────────────────────────────────────────────
+// ─── Gerar resumo e enviar email ──────────────────────────────────────────────
 
 async function gerarResumoEEnviarEmail() {
   if (!transcricaoCompleta.trim()) {
-    alert('[MeetMind] Nenhum áudio foi captado. Verifique as permissões.')
-    atualizarBotao(false)
+    alert('[MeetMind] Nenhum áudio foi capturado.\nCertifique-se de selecionar "Compartilhar áudio da aba" ao compartilhar.')
+    atualizarVisual('idle')
     return
   }
 
   try {
     // Gerar resumo
-    const respostaResumo = await fetch(`${API_URL}/api/summarize`, {
+    const resResumo = await fetch(`${API_URL}/api/summarize`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transcript: transcricaoCompleta }),
     })
-    const resumo = await respostaResumo.json()
-
+    const resumo = await resResumo.json()
     if (resumo.error) throw new Error(resumo.error)
 
     // Enviar email
-    const destinatarios = emailDestino.split(',').map(e => e.trim())
-    const respostaEmail = await fetch(`${API_URL}/api/send-email`, {
+    const destinatarios = emailDestino.split(',').map(e => e.trim()).filter(Boolean)
+    const resEmail = await fetch(`${API_URL}/api/send-email`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -207,65 +234,97 @@ async function gerarResumoEEnviarEmail() {
         },
       }),
     })
-    const resultadoEmail = await respostaEmail.json()
-    if (resultadoEmail.error) throw new Error(resultadoEmail.error)
+    const resultEmail = await resEmail.json()
+    if (resultEmail.error) throw new Error(resultEmail.error)
 
-    // Limpar para próxima reunião
+    // Sucesso
     transcricaoCompleta = ''
-    atualizarBotao(false, '✓ Ata enviada!')
-    setTimeout(() => atualizarBotao(false), 3000)
+    atualizarVisual('enviado')
+    setTimeout(() => atualizarVisual('idle'), 4000)
 
-    alert(`✓ Ata enviada para: ${emailDestino}\n\nTítulo: ${resumo.titulo}`)
+    console.log('[MeetMind] Ata enviada para:', emailDestino)
 
   } catch (erro) {
-    console.error('[MeetMind] Erro ao gerar resumo:', erro)
-    alert('Erro ao gerar a ata. Verifique o console para detalhes.')
-    atualizarBotao(false)
+    console.error('[MeetMind] Erro ao gerar ata:', erro)
+    alert('Erro ao gerar a ata: ' + erro.message)
+    atualizarVisual('idle')
   }
 }
 
-// ─── Atualizar visual do botão ───────────────────────────────────────────────
+// ─── Atualizar visual do botão ────────────────────────────────────────────────
 
-function atualizarBotao(gravandoAgora, textoCustom = null) {
-  const status = document.getElementById('meetmind-status')
-  if (!status) return
+function atualizarVisual(estado) {
+  const btn = document.getElementById('meetmind-btn')
+  const dot = document.getElementById('meetmind-dot')
+  const label = document.getElementById('meetmind-label')
+  const toast = document.getElementById('meetmind-toast')
+  if (!btn || !dot || !label) return
 
-  if (textoCustom) {
-    status.innerHTML = `
-      <span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block"></span>
-      ${textoCustom}
-    `
-    return
-  }
+  if (estado === 'gravando') {
+    dot.style.background = '#ef4444'
+    dot.style.animation = 'meetmind-pulse 1s infinite'
+    label.textContent = 'Parar e gerar ata'
+    btn.style.background = '#1a1a1a'
+    toast.style.display = 'block'
+    toast.textContent = '⏺ Gravando reunião...'
 
-  if (gravandoAgora) {
-    status.innerHTML = `
-      <span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block;animation:pulse 1s infinite"></span>
-      Gravando... (clique para encerrar)
-    `
-    status.style.background = '#1a1a1a'
-  } else {
-    status.innerHTML = `
-      <span style="width:8px;height:8px;border-radius:50%;background:#666;display:inline-block"></span>
-      Iniciar ata
-    `
+    // Adiciona animação de pulse
+    if (!document.getElementById('meetmind-style')) {
+      const style = document.createElement('style')
+      style.id = 'meetmind-style'
+      style.textContent = `
+        @keyframes meetmind-pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(1.3); }
+        }
+      `
+      document.head.appendChild(style)
+    }
+
+  } else if (estado === 'processando') {
+    dot.style.background = '#f59e0b'
+    dot.style.animation = 'none'
+    label.textContent = 'Gerando ata...'
+    btn.style.background = '#333'
+    toast.style.display = 'block'
+    toast.textContent = '⏳ Processando com IA...'
+
+  } else if (estado === 'enviado') {
+    dot.style.background = '#22c55e'
+    dot.style.animation = 'none'
+    label.textContent = '✓ Ata enviada!'
+    btn.style.background = '#166534'
+    toast.style.display = 'none'
+
+  } else { // idle
+    dot.style.background = '#666'
+    dot.style.animation = 'none'
+    label.textContent = 'Iniciar ata'
+    btn.style.background = '#1a1a1a'
+    toast.style.display = 'none'
   }
 }
 
-// ─── Inicializar ─────────────────────────────────────────────────────────────
+// ─── Inicializar ──────────────────────────────────────────────────────────────
+// Só injeta o botão quando estiver numa reunião ativa (URL tem /xxx-xxxx-xxx)
 
-// Aguarda a página do Meet carregar completamente
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', injetarBotao)
-} else {
-  // Se já carregou, espera 3s para a UI do Meet renderizar
-  setTimeout(injetarBotao, 3000)
+function verificarEIniciar() {
+  const estaEmReuniao = /meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}/.test(window.location.href)
+
+  if (estaEmReuniao) {
+    // Aguarda 3s para a UI do Meet carregar completamente
+    setTimeout(criarBotaoFlutuante, 3000)
+  }
 }
 
-// Tenta reinjetar se o Meet recarregar partes da UI (SPA)
-const observer = new MutationObserver(() => {
-  if (!document.getElementById('meetmind-btn')) {
-    injetarBotao()
+// Verifica na carga da página
+verificarEIniciar()
+
+// Verifica quando a URL muda (Meet é SPA — a URL muda sem recarregar a página)
+let urlAnterior = window.location.href
+setInterval(() => {
+  if (window.location.href !== urlAnterior) {
+    urlAnterior = window.location.href
+    verificarEIniciar()
   }
-})
-observer.observe(document.body, { childList: true, subtree: true })
+}, 1000)
