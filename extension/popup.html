@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 260px;
+      font-family: -apple-system, sans-serif;
+      background: #fff;
+      color: #1a1a1a;
+    }
+    .header {
+      padding: 16px;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo {
+      width: 28px;
+      height: 28px;
+      background: #1a1a1a;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .title { font-size: 14px; font-weight: 600; }
+    .subtitle { font-size: 11px; color: #999; }
+    .body { padding: 16px; }
+    .status-card {
+      background: #f9f9f9;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .status-label { font-size: 11px; color: #999; margin-bottom: 4px; }
+    .status-value { font-size: 13px; font-weight: 500; }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .dot-idle { background: #ccc; }
+    .dot-recording { background: #ef4444; }
+    .tip {
+      font-size: 11px;
+      color: #999;
+      line-height: 1.5;
+      text-align: center;
+      padding-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">M</div>
+    <div>
+      <div class="title">MeetMind</div>
+      <div class="subtitle">IA para reuniões</div>
+    </div>
+  </div>
+  <div class="body">
+    <div class="status-card">
+      <div class="status-label">Status</div>
+      <div class="status-value" id="status">
+        <span class="dot dot-idle"></span>Aguardando reunião
+      </div>
+    </div>
+    <p class="tip">
+      Entre em uma reunião no Google Meet e clique em
+      <strong>"Iniciar ata"</strong> para começar a gravar.
+    </p>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
